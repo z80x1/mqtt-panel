@@ -24,12 +24,13 @@
     <script type="text/javascript" src="js/mqttws31.js"></script>
     <script type="text/javascript">
         var host = '127.0.0.1';
-        var port = 3000;
-        var topic = '#';
+        var port = 9001;
+        var topic = 'home/#';
         var useTLS = false;
         var cleansession = true;
         var mqtt;
         var reconnectTimeout = 2000;
+        var livingTemp = new Array();
 
         function MQTTconnect() {
 	    if (typeof path == "undefined") {
@@ -72,7 +73,7 @@
         function onMessageArrived(message) {
             var topic = message.destinationName;
             var payload = message.payloadString;
-            //console.log("Topic: " + topic + ", Message payload: " + payload);
+            console.log("Topic: " + topic + ", Message payload: " + payload); //debug
             $('#message').html(topic + ', ' + payload);
             var message = topic.split('/');
             var area = message[1];
@@ -100,7 +101,7 @@
                         $('#label2').removeClass('label-success').addClass('label-danger');
                     }
                     break;
-              case 'living':
+              	case 'living':
                     $('#livingTempSensor').html('(Sensor value: ' + payload + ')');
                     $('#livingTempLabel').text(payload + '°C');
                     $('#livingTempLabel').removeClass('').addClass('label-default');
@@ -110,7 +111,7 @@
                     entry.push(parseInt(payload));
                     livingTemp.push(entry);
                     // Show only 20 values
-                    if (livingTemp.length >= 20) {
+                    if (livingTemp.length >= 30) {
                         livingTemp.shift()
                     }
 
@@ -210,7 +211,7 @@
                         <!-- Living room temperature -->
                         <tr>
                         <td width="40%" style="vertical-align:middle;"><h3>Living room temperature</h3><small id="livingTempSensor">(no value recieved)</small></td>
-                        <td style="vertical-align:middle;"><div id="livingTempChart" style="height:80px; width:180px;"></div></td>
+                        <td style="vertical-align:middle;"><div id="livingTempChart" style="height:80px; width:280px;"></div></td>
                         <td width="30%" style="vertical-align:middle;"><h4>&nbsp;<span id="livingTempLabel" class="label">Unknown</span></h4></td>
                         </tr>
                         <!-- Basement temperature -->

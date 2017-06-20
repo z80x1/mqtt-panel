@@ -14,7 +14,8 @@ timestamp = int(time.time())
 broker = '127.0.0.1'
 port = 1883
 element = 'home'
-areas = ['front', 'back', 'kitchen', 'basement', 'living']
+#areas = ['front', 'back', 'basement', 'living']
+areas = ['living']
 entrances = ['door', 'window']
 states = ['true', 'false']
 
