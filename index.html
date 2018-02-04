@@ -1,12 +1,11 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="uk">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="A web interface for MQTT over Websockets">
-    <meta name="author" content="Fabian Affolter">
 
-    <title>Home conditions</title>
+    <title>Моніторинг водонапорних башт та КНС</title>
 
     <!-- Bootstrap core CSS -->
     <link href="css/bootstrap.css" rel="stylesheet">
@@ -25,12 +24,14 @@
     <script type="text/javascript">
         var host = '127.0.0.1';
         var port = 9001;
-        var topic = 'home/#';
+        var topic_alarm = 'wt2/alarm/+';
+        var topic_status = 'wt2/status/+';
+        var topic_pressure = 'wt2/pressure';
         var useTLS = false;
         var cleansession = true;
         var mqtt;
         var reconnectTimeout = 2000;
-        var livingTemp = new Array();
+        var pressure = new Array();
 
         function MQTTconnect() {
 	    if (typeof path == "undefined") {
@@ -61,8 +62,10 @@
 
         function onConnect() {
             $('#status').html('Connected to ' + host + ':' + port + path);
-            mqtt.subscribe(topic, {qos: 0});
-            $('#topic').html(topic);
+            mqtt.subscribe(topic_alarm, {qos: 0});
+            mqtt.subscribe(topic_status, {qos: 0});
+            mqtt.subscribe(topic_pressure, {qos: 0});
+            $('#topic').html(topic_status);
         };
 
         function onConnectionLost(response) {
@@ -76,54 +79,56 @@
             console.log("Topic: " + topic + ", Message payload: " + payload); //debug
             $('#message').html(topic + ', ' + payload);
             var message = topic.split('/');
-            var area = message[1];
-            var state = message[2];
+            var type = message[1];
+            var device = message[2];
 
-            var timestamp = Math.round((new Date()).getTime() / 1000);
-            switch (area) {
-                case 'front': 
-                    $('#value1').html('(Switch value: ' + payload + ')');
-                    if (payload == 'true') {
-                        $('#label1').text('Closed');
-                        $('#label1').removeClass('label-danger').addClass('label-success');
-                    } else {
-                        $('#label1').text('Open');
-                        $('#label1').removeClass('label-success').addClass('label-danger');
-                    }
-                    break;
-                case 'back':
-                    $('#value2').html('(Switch value: ' + payload + ')');
-                    if (payload == 'true') {
-                        $('#label2').text('Closed');
-                        $('#label2').removeClass('label-danger').addClass('label-success');
-                    } else {
-                        $('#label2').text('Open');
-                        $('#label2').removeClass('label-success').addClass('label-danger');
-                    }
-                    break;
-              	case 'living':
-                    $('#livingTempSensor').html('(Sensor value: ' + payload + ')');
-                    $('#livingTempLabel').text(payload + '°C');
-                    $('#livingTempLabel').removeClass('').addClass('label-default');
+            var timestamp = Math.round((new Date()).getTime() / 1000); //Unix timestamp
+
+            if (type == 'status' && device == 'Pump1') {
+                $('#pump1').html('(value: ' + payload + ')');
+                if (payload != 'on') {
+                    $('#label1').text('Вимкнений');
+                    $('#label1').removeClass('label-success').addClass('label-danger');
+                } else {
+                    $('#label1').text('Працює');
+                    $('#label1').removeClass('label-danger').addClass('label-success');
+                }
+            }
+            if (type == 'status' && device == 'Pump2') {
+                $('#pump2').html('(value: ' + payload + ')');
+                if (payload != 'on') {
+                    $('#label2').text('Вимкнений');
+                    $('#label2').removeClass('label-success').addClass('label-danger');
+                } else {
+                    $('#label2').text('Працює');
+                    $('#label2').removeClass('label-danger').addClass('label-success');
+                }
+            }
+
+
+            switch (type) {
+              	case 'pressure':
+                    $('#pressureSensor').html('(value: ' + payload + ')');
+                    $('#pressureLabel').text(payload);
+                    $('#pressureLabel').removeClass('').addClass('label-default');
 
                     var entry = new Array();
                     entry.push(timestamp);
-                    entry.push(parseInt(payload));
-                    livingTemp.push(entry);
-                    // Show only 20 values
-                    if (livingTemp.length >= 30) {
-                        livingTemp.shift()
+                    entry.push(parseFloat(payload));
+                    pressure.push(entry);
+                    if (pressure.length >= 120) { //shift old data
+                        pressure.shift()
                     }
 
-                    var livingTempPlot = $.jqplot ('livingTempChart', [livingTemp], {
+                    var pressurePlot = $.jqplot ('pressureChart', [pressure], {
                         axesDefaults: {
                             labelRenderer: $.jqplot.CanvasAxisLabelRenderer,
-                            tickOptions: {
+                            /*tickOptions: {
                                 showMark: false,
                                 showGridline: false,
                                 show: false,
                                 showLabel: false,
-                            }
+                            }*/
                           },
                         grid: {
                             gridLineColor: '#FFFFFF',
@@ -141,7 +146,7 @@
                             xaxis: {
                               renderer:$.jqplot.DateAxisRenderer,
                               tickOptions:{
-                                formatString:'%T'
+                                formatString:'%H:%M:%S'
                               },
                               pad: 0
                             },
@@ -191,43 +196,41 @@
   <body>
     <div id="wrap">
       <div class="container">
-        <div class="page-header"><h1><b>Home conditions</b></h1></div>
+        <div class="page-header"><h1><b>Моніторинг башти</b></h1></div>
 
             <div class="panel panel-default">
               <div class="panel-body">
                     <table class="table table-striped">
-                        <!-- Entrace door -->
-                        <tr>
-                        <td width="40%" style="vertical-align:middle;"><h3>Entrance</h3><small id="value1">(no value recieved)</small></td>
+                    <tr>
+                        <td width="40%" style="vertical-align:middle;"><h3>Насос 1</h3><small id="pump1">(no value recieved)</small></td>
                         <td style="vertical-align:middle;"></td>
                         <td width="30%" style="vertical-align:middle;"><h4>&nbsp;<span id="label1" class="label">Unknown</span></h4></td>
-                        </tr>
-                        <!-- Back door -->
-                        <tr>
-                        <td width="40%" style="vertical-align:middle;"><h3>Back door</h3><small id="value2">(no value recieved)</small></td>
+                    </tr>
+                    <tr>
+                        <td width="40%" style="vertical-align:middle;"><h3>Насос 2</h3><small id="pump2">(no value recieved)</small></td>
                         <td style="vertical-align:middle;"></td>
                         <td width="30%" style="vertical-align:middle;"><h4>&nbsp;<span id="label2" class="label">Unknown</span></h4></td>
-                        </tr>
-                        <!-- Living room temperature -->
-                        <tr>
-                        <td width="40%" style="vertical-align:middle;"><h3>Living room temperature</h3><small id="livingTempSensor">(no value recieved)</small></td>
-                        <td style="vertical-align:middle;"><div id="livingTempChart" style="height:80px; width:280px;"></div></td>
-                        <td width="30%" style="vertical-align:middle;"><h4>&nbsp;<span id="livingTempLabel" class="label">Unknown</span></h4></td>
-                        </tr>
-                        <!-- Basement temperature -->
-                        <tr>
+                    </tr>
+                    <tr>
+                        <td width="40%" style="vertical-align:middle;"><h3>Тиск у системі</h3><small id="pressureSensor">(no value recieved)</small></td>
+                        <td style="vertical-align:middle;"><div id="pressureChart" style="height:280px; width:480px;"></div></td>
+                        <td width="30%" style="vertical-align:middle;"><h4>&nbsp;<span id="pressureLabel" class="label">Unknown</span></h4></td>
+                    </tr>
+
+                    <tr>
                         <td width="40%" style="vertical-align:middle;"><h3>Basement temperature</h3><small id="basementTempSensor">(no value recieved)</small></td>
                         <td style="vertical-align:middle;"><span class="basementTempSparkline"></span></td>
                         <td width="30%" style="vertical-align:middle;"><h4>&nbsp;<span id="basementTempLabel" class="label">Unknown</span></h4></td>
-                        </tr>
+                    </tr>
                     </table>
               </div>
             </div>
         <div class="panel panel-default">
           <div class="panel-body">
               <div class="row">
-                <div class="col-md-6"><b>Latest MQTT message:  </b> <small id="message">no message recieved</small></div>
+                <div class="col-md-6"><b>Останнє повідомлення:  </b> <small id="message">no message recieved</small></div>
                 <div class="col-md-6"><b>Status: </b>  <small id='status'></small></div>
+                <div class="col-md-6"><b>Topic: </b>  <small id='topic'></small></div>
               </div>
           </div>
         </div>
