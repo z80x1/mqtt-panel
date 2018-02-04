@@ -83,7 +83,7 @@ function onMessageArrived(message) {
     var type = message[1];
     var device = message[2];
 
-    var timestamp = Math.round((new Date()).getTime() / 1000); //Unix timestamp
+    var timestamp = new Date().getTime(); //Unix timestamp in ms
 
     if (type == 'status' && device == 'Pump1') {
         $('#pump1').html('(value: ' + payload + ')');
@@ -121,6 +121,7 @@ function onMessageArrived(message) {
             pressure.shift()
         }
 
+        $('#pressureChart').empty();
         var pressurePlot = $.jqplot ('pressureChart', [pressure], {
             axesDefaults: {
                 labelRenderer: $.jqplot.CanvasAxisLabelRenderer,
@@ -146,12 +147,12 @@ function onMessageArrived(message) {
               axes: {
                 xaxis: {
                   renderer:$.jqplot.DateAxisRenderer,
-                  tickOptions:{
-                    formatString:'%H:%M:%S'
-                  },
+                  tickRenderer: $.jqplot.CanvasAxisTickRenderer,
+                  tickOptions: {formatString:'%H:%M:%S'},
                   pad: 0
                 },
                 yaxis: {
+                    min: 0
                 }
             }
         });
