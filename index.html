@@ -11,8 +11,6 @@
     <link href="css/bootstrap.css" rel="stylesheet">
     <!-- jQuery -->
     <script type="text/javascript" src="js/jquery-1.11.2.min.js"></script>
-    <!-- Sparkline -->
-    <script type="text/javascript" src="js/jquery.sparkline.min.js"></script>
     <!-- jgPlot -->
     <link class="include" rel="stylesheet" type="text/css" href="dist/jquery.jqplot.min.css" />
     <script type="text/javascript" src="js/jquery.jqplot.min.js"></script>
@@ -25,10 +23,7 @@
 <script type="text/javascript">
 var host = '127.0.0.1';
 var port = 9001;
-var topic_alarm = 'wt2/alarm/+';
-var topic_status = 'wt2/status/+';
-var topic_pressure = 'wt2/pressure';
-var topic_system = 'wt2/system/#';
+var topic= 'wt2/#';
 var useTLS = false;
 var cleansession = true;
 var mqtt;
@@ -64,11 +59,8 @@ function MQTTconnect() {
 
 function onConnect() {
     $('#status').html('Connected to ' + host + ':' + port + path);
-    mqtt.subscribe(topic_alarm, {qos: 0});
-    mqtt.subscribe(topic_status, {qos: 0});
-    mqtt.subscribe(topic_pressure, {qos: 0});
-    mqtt.subscribe(topic_system, {qos: 0});
-    $('#topic').html(topic_status);
+    mqtt.subscribe(topic, {qos: 0});
+    $('#topic').html(topic);
 };
 
 function onConnectionLost(response) {
@@ -117,8 +109,11 @@ function onMessageArrived(message) {
             $('#label2').removeClass('label-danger').addClass('label-success');
         }
     }
-    else if (type == 'system') {
+    else if (type == 'online') {
         //TODO inform about online/offline status
+    }
+    else if (type == 'set') {
+        //TODO set pump switches to correct state at page loading
     }
     else {
         switch (type) {
@@ -180,6 +175,22 @@ function onMessageArrived(message) {
 
 $(document).ready(function() {
     MQTTconnect();
+	$('#check_remctrl').change(function () {
+		mqtt.send('wt2/set/RemCtrl', $('#check_remctrl').is(":checked") ? 'on' : 'off', 1, true);
+		if ($('#check_remctrl').is(":checked")) {
+			$('#check_pump1').removeAttr("disabled");
+			$('#check_pump2').removeAttr("disabled");
+		} else {
+			$('#check_pump1').attr("disabled", true);
+			$('#check_pump2').attr("disabled", true);
+		}
+	});
+	$('#check_pump1').change(function () {
+		mqtt.send('wt2/set/Pump1', $('#check_pump1').is(":checked") ? 'on' : 'off', 1, true);
+	});
+	$('#check_pump2').change(function () {
+		mqtt.send('wt2/set/Pump2', $('#check_pump2').is(":checked") ? 'on' : 'off', 1, true);
+	});
 });
 </script>
 
@@ -188,46 +199,81 @@ $(document).ready(function() {
   <body>
     <div id="wrap">
       <div class="container">
-        <div class="page-header"><h1><b>Моніторинг башти</b></h1></div>
-
-            <div class="panel panel-default">
-              <div class="panel-body">
-                    <table class="table table-striped">
-                    <tr>
-                        <td width="40%" style="vertical-align:middle;"><h3>Зовнішнє живлення</h3><small id="alarm_extpwr">(no value recieved)</small></td>
-                        <td style="vertical-align:middle;"></td>
-                        <td width="30%" style="vertical-align:middle;"><h4>&nbsp;<span id="label_extpwr" class="label">Unknown</span></h4></td>
-                    </tr>
-                    <tr>
-                        <td width="40%" style="vertical-align:middle;"><h3>Насос 1</h3><small id="pump1">(no value recieved)</small></td>
-                        <td style="vertical-align:middle;"></td>
-                        <td width="30%" style="vertical-align:middle;"><h4>&nbsp;<span id="label1" class="label">Unknown</span></h4></td>
-                    </tr>
-                    <tr>
-                        <td width="40%" style="vertical-align:middle;"><h3>Насос 2</h3><small id="pump2">(no value recieved)</small></td>
-                        <td style="vertical-align:middle;"></td>
-                        <td width="30%" style="vertical-align:middle;"><h4>&nbsp;<span id="label2" class="label">Unknown</span></h4></td>
-                    </tr>
-                    <tr>
-                        <td width="40%" style="vertical-align:middle;"><h3>Тиск у системі</h3><small id="pressureSensor">(no value recieved)</small></td>
-                        <td style="vertical-align:middle;"><div id="pressureChart" style="height:280px; width:480px;"></div></td>
-                        <td width="30%" style="vertical-align:middle;"><h4>&nbsp;<span id="pressureLabel" class="label">Unknown</span></h4></td>
-                    </tr>
-
-                    </table>
-              </div>
-            </div>
-        <div class="panel panel-default">
-          <div class="panel-body">
-              <div class="row">
-                <div class="col-md-6"><b>Останнє повідомлення:  </b> <small id="message">no message recieved</small></div>
-                <div class="col-md-6"><b>Status: </b>  <small id='status'></small></div>
-                <div class="col-md-6"><b>Topic: </b>  <small id='topic'></small></div>
-              </div>
-          </div>
-        </div>
-      <div class="footer">
-        <small><p class="text-center">&copy; <a href="http://affolter-engineering.ch">Affolter Engineering</a> 2013 - 2017</p></small>
-    </div>
+        <div class="page-header"><h2><b>Моніторинг башти</b></h2></div>
+		<div class="panel panel-default">
+		  <div class="panel-body">
+			<table class="table table-striped">
+			<tr>
+				<td colspan="3" style="vertical-align:middle;">
+					<div class="col-md-6">
+					  <label for="check_remctrl">Дистанційне керування</label>
+					  <input type="checkbox" name="check_remctrl" id="check_remctrl">
+					</div>
+					<div class="col-md-3">
+					  <label for="check_pump1">Насос 1</label>
+					  <input type="checkbox" name="check_pump1" id="check_pump1">
+					</div>
+					<div class="col-md-3">
+					  <label for="check_pump2">Насос 2</label>
+					  <input type="checkbox" name="check_pump2" id="check_pump2">
+					</div>
+				</td>
+			</tr>
+			<tr>
+				<td width="40%" style="vertical-align:middle;">
+					<h4>Зовнішнє живлення</h4>
+					<small style="display:none" id="alarm_extpwr">(no value recieved)</small>
+				</td>
+				<td width="0%" style="vertical-align:middle;"></td>
+				<td style="vertical-align:middle;">
+					<h4>&nbsp;<span id="label_extpwr" class="label">Unknown</span></h4>
+				</td>
+			</tr>
+			<tr>
+				<td width="40%" style="vertical-align:middle;">
+					<h4>Насос 1</h4>
+					<small style="display:none" id="pump1">(no value recieved)</small>
+				</td>
+				<td style="vertical-align:middle;"></td>
+				<td style="vertical-align:middle;"><h4>&nbsp;<span id="label1" class="label">Unknown</span></h4></td>
+			</tr>
+			<tr>
+				<td width="40%" style="vertical-align:middle;">
+					<h4>Насос 2</h4>
+					<small style="display:none" id="pump2">(no value recieved)</small>
+				</td>
+				<td style="vertical-align:middle;"></td>
+				<td width="30%" style="vertical-align:middle;"><h4>&nbsp;<span id="label2" class="label">Unknown</span></h4></td>
+			</tr>
+			<tr>
+				<td width="40%" style="vertical-align:middle;">
+					<h4>Тиск у системі</h4>
+					<small style="display:none" id="pressureSensor">(no value recieved)</small>
+				</td>
+				<td style="vertical-align:middle;"></td>
+				<td width="30%" style="vertical-align:middle;"><h4>&nbsp;<span id="pressureLabel" class="label">Unknown</span></h4></td>
+			</tr>
+			<tr>
+				<td colspan="3" style="vertical-align:middle;">
+				  <div id="pressureChart" style="height:180px; width:400px;"></div>
+				</td>
+			</tr>
+			</table>
+		  </div>
+		</div>
+		<div class="panel panel-default">
+		  <div class="panel-body">
+			  <div class="row">
+				<div class="col-md-6"><b>Останнє повідомлення:  </b> <small id="message">no message recieved</small></div>
+				<div class="col-md-6"><b>Status: </b>  <small id='status'></small></div>
+				<div class="col-md-6"><b>Topic: </b>  <small id='topic'></small></div>
+			  </div>
+		  </div>
+		</div>
+		<div class="footer">
+		  <small><p class="text-center">&copy; <a href="">z80x1</a> 2018</p></small>
+		</div>
+	  </div>
+	</div>
   </body>
 </html>
