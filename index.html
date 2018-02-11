@@ -23,12 +23,13 @@
 <script type="text/javascript">
 var host = '127.0.0.1';
 var port = 9001;
-var topic= 'wt2/#';
+var topic= '#';
 var useTLS = false;
 var cleansession = true;
 var mqtt;
 var reconnectTimeout = 2000;
-var pressure = new Array();
+var objs_inuse = ["wt2"];
+var wt2_pressure = new Array();
 
 function MQTTconnect() {
     if (typeof path == "undefined") {
@@ -65,7 +66,7 @@ function onConnect() {
 
 function onConnectionLost(response) {
     setTimeout(MQTTconnect, reconnectTimeout);
-    $('#status').html("Connection lost: " + responseObject.errorMessage + ". Reconnecting...");
+    $('#status').html("Connection lost: " + response.errorMessage + ". Reconnecting...");
 };
 
 function onMessageArrived(message) {
@@ -74,39 +75,43 @@ function onMessageArrived(message) {
     console.log("Topic: " + topic + ", Message payload: " + payload); //debug
     $('#message').html(topic + ', ' + payload);
     var message = topic.split('/');
-    var type = message[1];
-    var device = message[2];
+    var obj = message[0]; // e.g. wt2, kns01
+    var type = message[1]; // e.g. alarm/status/pressure
+    var device = message[2]; // e.g. ExtPwr/Pump1
 
     var timestamp = new Date().getTime(); //Unix timestamp in ms
 
     if (type == 'alarm' && device == 'ExtPwr') {
-        $('#alarm_extpwr').html('(value: ' + payload + ')');
+        $('#alarm_'+obj+device).html('(value: ' + payload + ')');
+		labelid = '#label_'+obj+device; //e.g. #label_wt2ExtPwr
         if (payload != 'on') {
-            $('#label_extpwr').text('Відсутнє');
-            $('#label_extpwr').removeClass('label-success').addClass('label-danger');
+            $(labelid).text('Відсутнє');
+            $(labelid).removeClass('label-success').addClass('label-danger');
         } else {
-            $('#label_extpwr').text('Наявне');
-            $('#label_extpwr').removeClass('label-danger').addClass('label-success');
+            $(labelid).text('Наявне');
+            $(labelid).removeClass('label-danger').addClass('label-success');
         }
     }
     else if (type == 'status' && device == 'Pump1') {
-        $('#pump1').html('(value: ' + payload + ')');
+        $('#value_'+obj+device).html('(value: ' + payload + ')');
+		labelid = '#label_'+obj+device; //e.g. #label_wt2Pump1
         if (payload != 'on') {
-            $('#label1').text('Вимкнений');
-            $('#label1').removeClass('label-success').addClass('label-danger');
+            $(labelid).text('Вимкнений');
+            $(labelid).removeClass('label-success').addClass('label-danger');
         } else {
-            $('#label1').text('Працює');
-            $('#label1').removeClass('label-danger').addClass('label-success');
+            $(labelid).text('Працює');
+            $(labelid).removeClass('label-danger').addClass('label-success');
         }
     }
     else if (type == 'status' && device == 'Pump2') {
-        $('#pump2').html('(value: ' + payload + ')');
+        $('#value_'+obj+device).html('(value: ' + payload + ')');
+		labelid = '#label_'+obj+device; //e.g. #label_wt2Pump2
         if (payload != 'on') {
-            $('#label2').text('Вимкнений');
-            $('#label2').removeClass('label-success').addClass('label-danger');
+            $(labelid).text('Вимкнений');
+            $(labelid).removeClass('label-success').addClass('label-danger');
         } else {
-            $('#label2').text('Працює');
-            $('#label2').removeClass('label-danger').addClass('label-success');
+            $(labelid).text('Працює');
+            $(labelid).removeClass('label-danger').addClass('label-success');
         }
     }
     else if (type == 'online') {
@@ -118,20 +123,23 @@ function onMessageArrived(message) {
     else {
         switch (type) {
         case 'pressure':
-            $('#pressureSensor').html('(value: ' + payload + ')');
-            $('#pressureLabel').text(payload);
-            $('#pressureLabel').removeClass('').addClass('label-default');
+			if (obj != 'wt2') break; //TODO: add plots for other towers
+            $('#value_'+obj+'pressure').html('(value: ' + payload + ')');
+			labelid = '#label_'+obj+'pressure';
+            $(labelid).text(payload);
+            $(labelid).removeClass('').addClass('label-default');
 
             var entry = new Array();
             entry.push(timestamp);
             entry.push(parseFloat(payload));
-            pressure.push(entry);
-            if (pressure.length >= 120) { //shift old data
-                pressure.shift()
+            wt2_pressure.push(entry);
+            if (wt2_pressure.length >= 120) { //shift old data
+                wt2_pressure.shift();
             }
 
-            $('#pressureChart').empty();
-            var pressurePlot = $.jqplot ('pressureChart', [pressure], {
+			chartid = 'chart_'+obj+'pressure';
+            $('#'+chartid).empty();
+            var pressurePlot = $.jqplot(chartid, [wt2_pressure], {
                 axesDefaults: {
                     labelRenderer: $.jqplot.CanvasAxisLabelRenderer,
                     /*tickOptions: {
@@ -175,22 +183,29 @@ function onMessageArrived(message) {
 
 $(document).ready(function() {
     MQTTconnect();
-	$('#check_remctrl').change(function () {
-		mqtt.send('wt2/set/RemCtrl', $('#check_remctrl').is(":checked") ? 'on' : 'off', 1, true);
-		if ($('#check_remctrl').is(":checked")) {
-			$('#check_pump1').removeAttr("disabled");
-			$('#check_pump2').removeAttr("disabled");
-		} else {
-			$('#check_pump1').attr("disabled", true);
-			$('#check_pump2').attr("disabled", true);
-		}
-	});
-	$('#check_pump1').change(function () {
-		mqtt.send('wt2/set/Pump1', $('#check_pump1').is(":checked") ? 'on' : 'off', 1, true);
-	});
-	$('#check_pump2').change(function () {
-		mqtt.send('wt2/set/Pump2', $('#check_pump2').is(":checked") ? 'on' : 'off', 1, true);
-	});
+	for (i = 0; i < objs_inuse.length; i++) {
+		obj = objs_inuse[i];
+		remctl_id = '#check_'+obj+'remctrl';
+		pump1_id = '#check_'+obj+'pump1';
+		pump2_id = '#check_'+obj+'pump2';
+
+		$(remctl_id).change(function () {
+			mqtt.send('wt2/set/RemCtrl', $(remctl_id).is(":checked") ? 'on' : 'off', 1, true);
+			if ($(remctl_id).is(":checked")) {
+				$(pump1_id).removeAttr("disabled");
+				$(pump2_id).removeAttr("disabled");
+			} else {
+				$(pump1_id).attr("disabled", true);
+				$(pump2_id).attr("disabled", true);
+			}
+		});
+		$(pump1_id).change(function () {
+			mqtt.send('wt2/set/Pump1', $(pump1_id).is(":checked") ? 'on' : 'off', 1, true);
+		});
+		$(pump2_id).change(function () {
+			mqtt.send('wt2/set/Pump2', $(pump2_id).is(":checked") ? 'on' : 'off', 1, true);
+		});
+	}
 });
 </script>
 
@@ -202,65 +217,155 @@ $(document).ready(function() {
         <div class="page-header"><h2><b>Моніторинг башти</b></h2></div>
 		<div class="panel panel-default">
 		  <div class="panel-body">
-			<table class="table table-striped">
-			<tr>
-				<td colspan="3" style="vertical-align:middle;">
+
+            <div class="col-md-4">
+              <div class="card mb-4 box-shadow">
+                <div class="card-body">
+			  	<div class="row">Башта №1. <small>Адреса: Ставище, вул. Шевченка 123</small></div>
+				<div class="row">
+				<table class="table table-striped">
+				<tr><td style="vertical-align:middle;">
+			  		<div class="row">
 					<div class="col-md-6">
-					  <label for="check_remctrl">Дистанційне керування</label>
-					  <input type="checkbox" name="check_remctrl" id="check_remctrl">
+					  <label for="check_wt2remctrl">Дистанційне керування</label>
+					  <input type="checkbox" name="check_wt2remctrl" id="check_wt2remctrl">
 					</div>
 					<div class="col-md-3">
-					  <label for="check_pump1">Насос 1</label>
-					  <input type="checkbox" name="check_pump1" id="check_pump1">
+					  <label for="check_wt2pump1">Насос 1</label>
+					  <input type="checkbox" name="check_wt2pump1" id="check_wt2pump1">
 					</div>
 					<div class="col-md-3">
-					  <label for="check_pump2">Насос 2</label>
-					  <input type="checkbox" name="check_pump2" id="check_pump2">
+					  <label for="check_wt2pump2">Насос 2</label>
+					  <input type="checkbox" name="check_wt2pump2" id="check_wt2pump2">
 					</div>
-				</td>
-			</tr>
-			<tr>
-				<td width="40%" style="vertical-align:middle;">
-					<h4>Зовнішнє живлення</h4>
-					<small style="display:none" id="alarm_extpwr">(no value recieved)</small>
-				</td>
-				<td width="0%" style="vertical-align:middle;"></td>
-				<td style="vertical-align:middle;">
-					<h4>&nbsp;<span id="label_extpwr" class="label">Unknown</span></h4>
-				</td>
-			</tr>
-			<tr>
-				<td width="40%" style="vertical-align:middle;">
-					<h4>Насос 1</h4>
-					<small style="display:none" id="pump1">(no value recieved)</small>
-				</td>
-				<td style="vertical-align:middle;"></td>
-				<td style="vertical-align:middle;"><h4>&nbsp;<span id="label1" class="label">Unknown</span></h4></td>
-			</tr>
-			<tr>
-				<td width="40%" style="vertical-align:middle;">
-					<h4>Насос 2</h4>
-					<small style="display:none" id="pump2">(no value recieved)</small>
-				</td>
-				<td style="vertical-align:middle;"></td>
-				<td width="30%" style="vertical-align:middle;"><h4>&nbsp;<span id="label2" class="label">Unknown</span></h4></td>
-			</tr>
-			<tr>
-				<td width="40%" style="vertical-align:middle;">
-					<h4>Тиск у системі</h4>
-					<small style="display:none" id="pressureSensor">(no value recieved)</small>
-				</td>
-				<td style="vertical-align:middle;"></td>
-				<td width="30%" style="vertical-align:middle;"><h4>&nbsp;<span id="pressureLabel" class="label">Unknown</span></h4></td>
-			</tr>
-			<tr>
-				<td colspan="3" style="vertical-align:middle;">
-				  <div id="pressureChart" style="height:180px; width:400px;"></div>
-				</td>
-			</tr>
-			</table>
+					</div>
+				</td></tr>
+				<tr><td style="vertical-align:middle;">
+			  		<div class="row">
+					<div class="col-md-8">
+					  <h4>Зовнішнє живлення</h4>
+					  <small style="display:none" id="alarm_wt2ExtPwr">(no value recieved)</small>
+					</div>
+					<div class="col-md-4">
+					  <h4>&nbsp;<span id="label_wt2ExtPwr" class="label">Unknown</span></h4>
+					</div>
+					</div>
+				</td></tr>
+				<tr><td style="vertical-align:middle;">
+			  		<div class="row">
+					<div class="col-md-8">
+					  <h4>Насос 1</h4>
+					  <small style="display:none" id="value_wt2Pump1">(no value recieved)</small>
+					</div>
+					<div class="col-md-4">
+				 	  <h4>&nbsp;<span id="label_wt2Pump1" class="label">Unknown</span></h4>
+					</div>
+					</div>
+				</td></tr>
+				<tr><td style="vertical-align:middle;">
+			  		<div class="row">
+					<div class="col-md-8">
+					  <h4>Насос 2</h4>
+					  <small style="display:none" id="value_wt2Pump2">(no value recieved)</small>
+					</div>
+					<div class="col-md-4">
+					  <h4>&nbsp;<span id="label_wt2Pump2" class="label">Unknown</span></h4>
+					</div>
+					</div>
+				</td></tr>
+				<tr><td style="vertical-align:middle;">
+			  		<div class="row">
+					<div class="col-md-8">
+					  <h4>Тиск у системі</h4>
+					  <small style="display:none" id="value_wt2pressure">(no value recieved)</small>
+					</div>
+					<div class="col-md-4">
+					  <h4>&nbsp;<span id="label_wt2pressure" class="label">Unknown</span></h4>
+					</div>
+					</div>
+				    <div id="chart_wt2pressure" style="height:180px; width:390px;"></div>
+				</td></tr>
+				</table>
+                </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="col-md-4">
+              <div class="card mb-4 box-shadow">
+                <div class="card-body">
+                  <p class="card-text">This is a wider card with supporting text below as a natural lead-in to additional content. This content is a little bit longer.</p>
+                  <div class="d-flex justify-content-between align-items-center">
+                    <div class="btn-group">
+                      <button type="button" class="btn btn-sm btn-outline-secondary">View</button>
+                      <button type="button" class="btn btn-sm btn-outline-secondary">Edit</button>
+                    </div>
+                    <small class="text-muted">9 mins</small>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="card mb-4 box-shadow">
+                <div class="card-body">
+                  <p class="card-text">This is a wider card with supporting text below as a natural lead-in to additional content. This content is a little bit longer.</p>
+                  <div class="d-flex justify-content-between align-items-center">
+                    <div class="btn-group">
+                      <button type="button" class="btn btn-sm btn-outline-secondary">View</button>
+                      <button type="button" class="btn btn-sm btn-outline-secondary">Edit</button>
+                    </div>
+                    <small class="text-muted">9 mins</small>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="col-md-4">
+              <div class="card mb-4 box-shadow">
+                <div class="card-body">
+                  <p class="card-text">This is a wider card with supporting text below as a natural lead-in to additional content. This content is a little bit longer.</p>
+                  <div class="d-flex justify-content-between align-items-center">
+                    <div class="btn-group">
+                      <button type="button" class="btn btn-sm btn-outline-secondary">View</button>
+                      <button type="button" class="btn btn-sm btn-outline-secondary">Edit</button>
+                    </div>
+                    <small class="text-muted">9 mins</small>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="card mb-4 box-shadow">
+                <div class="card-body">
+                  <p class="card-text">This is a wider card with supporting text below as a natural lead-in to additional content. This content is a little bit longer.</p>
+                  <div class="d-flex justify-content-between align-items-center">
+                    <div class="btn-group">
+                      <button type="button" class="btn btn-sm btn-outline-secondary">View</button>
+                      <button type="button" class="btn btn-sm btn-outline-secondary">Edit</button>
+                    </div>
+                    <small class="text-muted">9 mins</small>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="card mb-4 box-shadow">
+                <div class="card-body">
+                  <p class="card-text">This is a wider card with supporting text below as a natural lead-in to additional content. This content is a little bit longer.</p>
+                  <div class="d-flex justify-content-between align-items-center">
+                    <div class="btn-group">
+                      <button type="button" class="btn btn-sm btn-outline-secondary">View</button>
+                      <button type="button" class="btn btn-sm btn-outline-secondary">Edit</button>
+                    </div>
+                    <small class="text-muted">9 mins</small>
+                  </div>
+                </div>
+              </div>
+            </div>
+          
 		  </div>
 		</div>
+
 		<div class="panel panel-default">
 		  <div class="panel-body">
 			  <div class="row">
